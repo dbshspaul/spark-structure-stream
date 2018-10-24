@@ -8,15 +8,15 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.spark.SparkConf;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Encoders;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.streaming.StreamingQuery;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.StreamingQueryException;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
+
+import java.util.List;
+
+import static org.apache.spark.sql.functions.collect_list;
+import static org.apache.spark.sql.functions.collect_set;
 
 /**
  * Structured streaming demo using Avro'ed Kafka topic as input
@@ -27,16 +27,8 @@ public class StructuredDemo {
 
     private static Injection<GenericRecord, byte[]> recordInjection;
     private static StructType type;
-    private static final String USER_SCHEMA = "{"
-            + "\"type\":\"record\","
-            + "\"name\":\"myrecord\","
-            + "\"fields\":["
-            + "  { \"name\":\"str1\", \"type\":\"string\" },"
-            + "  { \"name\":\"str2\", \"type\":\"string\" },"
-            + "  { \"name\":\"int1\", \"type\":\"int\" }"
-            + "]}";
     private static Schema.Parser parser = new Schema.Parser();
-    private static Schema schema = parser.parse(USER_SCHEMA);
+    private static Schema schema = parser.parse(GeneratorDemo.USER_SCHEMA);
 
     static { //once per VM, lazily
         recordInjection = GenericAvroCodecs.toBinary(schema);
@@ -69,15 +61,23 @@ public class StructuredDemo {
                 .format("kafka")
                 .option("kafka.bootstrap.servers", "localhost:9092")
                 .option("subscribe", "mytopic")
-                .option("startingOffsets", "earliest")
+//                .option("startingOffsets", "earliest")
                 .load();
 
         //start the streaming query
         sparkSession.udf().register("deserialize", (byte[] data) -> {
-            GenericRecord record = recordInjection.invert(data).get();
-            return RowFactory.create(record.get("str1").toString(), record.get("str2").toString(), record.get("int1"));
 
+            GenericRecord record = recordInjection.invert(data).get();
+            record.getSchema();
+            List<Schema.Field> fields = record.getSchema().getFields();
+            Object[] recordArr = new Object[fields.size()];
+
+            for (int i = 0; i < fields.size(); i++) {
+                recordArr[i] = record.get(fields.get(i).name()) == null ? "" : record.get(fields.get(i).name()).toString();
+            }
+            return RowFactory.create(recordArr);
         }, DataTypes.createStructType(type.fields()));
+
         ds1.printSchema();
         Dataset<Row> ds2 = ds1
                 .select("value").as(Encoders.BINARY())
@@ -86,16 +86,20 @@ public class StructuredDemo {
 
         ds2.printSchema();
 
-        StreamingQuery query1 = ds2
-                .groupBy("str1")
-                .count()
-                .writeStream()
+        Dataset<Row> ds3 = ds2.groupBy("str1").agg(collect_set("str2"), collect_list("int1"));
+        ds3.printSchema();
+
+
+        ds3.writeStream()
+                .option("path", "D:/sparkout/data")
+                .option("checkpointLocation", "checkpoint")
                 .queryName("Test query")
-                .outputMode("complete")
-                .format("console")
-                .start();
-
-        query1.awaitTermination();
-
+//                .outputMode("complete")
+                .foreach(new FileWritter())
+                .outputMode("update")
+                .start()
+                .awaitTermination();
     }
+
+
 }

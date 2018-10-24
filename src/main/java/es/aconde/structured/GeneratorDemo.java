@@ -7,8 +7,9 @@ import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import java.util.SplittableRandom;
+
 import java.util.Properties;
+import java.util.SplittableRandom;
 
 /**
  * Fake data generator for Kafka
@@ -26,11 +27,10 @@ public class GeneratorDemo {
             + "\"fields\":["
             + "  { \"name\":\"str1\", \"type\":\"string\" },"
             + "  { \"name\":\"str2\", \"type\":\"string\" },"
-            + "  { \"name\":\"int1\", \"type\":\"int\" }"
+            + "  { \"name\":\"int1\", \"type\":\"string\" }"
             + "]}";
 
     /**
-     *
      * @param args
      * @throws InterruptedException
      */
@@ -47,17 +47,18 @@ public class GeneratorDemo {
         KafkaProducer<String, byte[]> producer = new KafkaProducer<>(props);
         SplittableRandom random = new SplittableRandom();
 
-        while (true) {
+        for (int i = 0; i < 100000000; i++) {
             GenericData.Record avroRecord = new GenericData.Record(schema);
             avroRecord.put("str1", "Str 1-" + random.nextInt(10));
             avroRecord.put("str2", "Str 2-" + random.nextInt(1000));
-            avroRecord.put("int1", random.nextInt(10000));
+            avroRecord.put("int1", String.valueOf(random.nextInt(10000)));
 
             byte[] bytes = recordInjection.apply(avroRecord);
 
             ProducerRecord<String, byte[]> record = new ProducerRecord<>("mytopic", bytes);
             producer.send(record);
-            Thread.sleep(100);
+            Thread.sleep(3000);
+            System.out.println("i+1 = " + (i + 1));
         }
 
     }
