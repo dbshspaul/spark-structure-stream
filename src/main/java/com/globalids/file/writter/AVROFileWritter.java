@@ -1,4 +1,4 @@
-package com.globalids.util;
+package com.globalids.file.writter;
 
 import org.apache.avro.Schema;
 import org.apache.avro.file.DataFileWriter;
@@ -51,7 +51,7 @@ public class AVROFileWritter extends ForeachWriter<Row> {
         GenericRecord someRecord = new GenericData.Record(schema);
         for (String columnName : columnNames) {
             int i = row.fieldIndex(columnName);
-            someRecord.put(columnName.toUpperCase(), row.get(i));
+            someRecord.put(columnName, row.get(i));
         }
         try {
             dataFileWriter.append(someRecord);

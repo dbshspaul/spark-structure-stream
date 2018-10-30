@@ -1,5 +1,6 @@
-package com.globalids.util;
+package com.globalids.data.consumer;
 
+import com.globalids.spark.StructuredStreamProcessor;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -42,7 +43,7 @@ public class JobInitialiser {
                     new Thread(() -> {
                         StructuredStreamProcessor processor = new StructuredStreamProcessor(schema);
                         try {
-                            processor.startStreamingJob(topic,target_path);
+                            processor.startStreamingJob(topic, target_path);
                         } catch (StreamingQueryException e) {
                             e.printStackTrace();
                         }

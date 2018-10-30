@@ -1,4 +1,4 @@
-package com.globalids.util;
+package com.globalids.data.generator;
 
 import com.twitter.bijection.Injection;
 import com.twitter.bijection.avro.GenericAvroCodecs;
@@ -57,7 +57,7 @@ public class GeneratorDemo {
 
             ProducerRecord<String, byte[]> record = new ProducerRecord<>("mytopic", bytes);
             producer.send(record);
-            System.out.println("i+1 = " + avroRecord);
+            System.out.println((i + 1) + " = " + avroRecord);
             Thread.sleep(7000);
         }
 
