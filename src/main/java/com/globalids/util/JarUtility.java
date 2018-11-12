@@ -1,4 +1,4 @@
-package test;
+package com.globalids.util;
 
 import java.io.File;
 import java.util.*;

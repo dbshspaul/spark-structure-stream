@@ -1,68 +1,35 @@
 package com.globalids.spark;
 
 import com.databricks.spark.avro.SchemaConverters;
-import com.globalids.file.writter.AVROFileWritter;
+import com.globalids.data.generator.GeneratorDemo;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.specific.SpecificDatumReader;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.spark.SparkConf;
+import org.apache.log4j.Logger;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.encoders.RowEncoder;
+import org.apache.spark.sql.streaming.DataStreamWriter;
 import org.apache.spark.sql.streaming.StreamingQueryException;
 import org.apache.spark.sql.types.StructType;
-import test.JarUtility;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.apache.spark.sql.functions.collect_set;
 
 /**
  * Created by debasish paul
  */
 public class StructuredStreamProcessor {
+    private static final Logger LOGGER = Logger.getLogger(StructuredStreamProcessor.class);
 
-    private static StructType type;
-    private static Schema schema;
 
-    public StructuredStreamProcessor(String schemaJSON) {
+    public static void startStreamingJob(String topic, String filePath, String schemaJSON) throws StreamingQueryException {
         Schema.Parser parser = new Schema.Parser();
-        schema = parser.parse(schemaJSON);
-        type = (StructType) SchemaConverters.toSqlType(schema).dataType();
-    }
+        Schema schema = parser.parse(schemaJSON);
+        StructType type = (StructType) SchemaConverters.toSqlType(schema).dataType();
 
-    public void startStreamingJob(String topic, String filePath) throws StreamingQueryException {
-        LogManager.getLogger("org.apache.spark").setLevel(Level.WARN);
-        LogManager.getLogger("akka").setLevel(Level.ERROR);
-
-        SparkConf conf = new SparkConf()
-                .setJars(JarUtility.getAllJarPath())
-                .setAppName("kafka-structured-transformation")
-                .setMaster("local[*]");
-//                .setMaster("spark://192.168.33.207:7077");
-
-        SparkSession sparkSession = SparkSession
-                .builder()
-                .config(conf)
-                .getOrCreate();
-
-        sparkSession.sqlContext().setConf("spark.sql.shuffle.partitions", "3");
-//        sparkSession.sqlContext().setConf("spark.sql.shuffle.partitions", "30");
-//        sparkSession.sqlContext().setConf("spark.default.parallelism", "30");
-
-        //data stream from kafka
-        Dataset<Row> ds1 = sparkSession
-                .readStream()
-                .format("kafka")
-                .option("kafka.bootstrap.servers", "192.168.33.207:9092")
-                .option("subscribe", topic)
-                .option("startingOffsets", "earliest")
-                .load();
 
         List<String> columnNames = new ArrayList<>();
         List<Schema.Field> fields = schema.getFields();
@@ -70,13 +37,21 @@ public class StructuredStreamProcessor {
             String fieldName = fields.get(i).name();
             columnNames.add(fieldName);
         }
-        ds1.printSchema();
 
-        Dataset<Row> ds2 = ds1
-                .select("value").as(Encoders.BINARY())
+        SparkSession sparkSession = SparkSessionBuilder.getSparkSession();
+        Dataset<Row> kafkaDataSet = sparkSession
+                .readStream()
+                .format("kafka")
+                .option("kafka.bootstrap.servers", "192.168.33.207:9092")
+                .option("subscribe", topic)
+                .option("startingOffsets", "earliest")
+                .load();
+        DataStreamWriter<Row> streamWriter = kafkaDataSet.select("value").as(Encoders.BINARY())
                 .map(bytes -> {
+                    Schema.Parser parser1 = new Schema.Parser();
+                    Schema schema1 = parser1.parse(schemaJSON);
                     Object[] recordArr = new Object[columnNames.size()];
-                    GenericRecord record = deserialize(bytes, schema);
+                    GenericRecord record = deserialize(bytes, schema1);
 
                     for (int i = 0; i < columnNames.size(); i++) {
                         String fieldName = columnNames.get(i);
@@ -87,23 +62,15 @@ public class StructuredStreamProcessor {
                         }
                     }
                     return RowFactory.create(recordArr);
-                }, RowEncoder.apply(type));
-        ds2.printSchema();
+                }, RowEncoder.apply(type)).writeStream()
+                .option("path", filePath)
+                .option("checkpointLocation", "checkpoint/" + topic)
+                .queryName("Dump Data for " + topic.substring(topic.indexOf("GID_OBJ_")))
+                .format("parquet")
+                .outputMode("append");
 
-        Column columns[] = new Column[columnNames.size()];
-        for (int i = 0, j = 0; i < columnNames.size(); i++) {
-            columns[j++] = collect_set(columnNames.get(i));
-        }
-        ds2.writeStream()
-                .option("path", "D:/sparkout/data")
-                .option("checkpointLocation", "checkpoint")
-                .queryName("query plan for dump all")
-                .foreach(new AVROFileWritter(schema.toString(), filePath, columnNames))
-                .outputMode("append")
-                .start()
-                .awaitTermination();
+        streamWriter.start().awaitTermination();
     }
-
 
     public static GenericRecord deserialize(byte[] data, Schema schema) throws Exception {
         Decoder decoder = DecoderFactory.get().binaryDecoder(data, null);
@@ -113,16 +80,8 @@ public class StructuredStreamProcessor {
 
 
     public static void main(String[] args) {
-        StructuredStreamProcessor processor = new StructuredStreamProcessor("{"
-                + "\"type\":\"record\","
-                + "\"name\":\"alarm\","
-                + "\"fields\":["
-                + "  { \"name\":\"str1\", \"type\":\"string\" },"
-                + "  { \"name\":\"str2\", \"type\":\"string\" },"
-                + "  { \"name\":\"int1\", \"type\":\"string\" }"
-                + "]}");
         try {
-            processor.startStreamingJob("mytopic", "C:\\Users\\debasish paul\\Desktop\\test\\test.avro");
+            startStreamingJob("GID_OBJ_mytopic", "hdfs://192.168.44.112:8020/gid/all", GeneratorDemo.USER_SCHEMA);
         } catch (StreamingQueryException e) {
             e.printStackTrace();
         }

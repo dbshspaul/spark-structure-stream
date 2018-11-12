@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>es.aconde</groupId>
-    <artifactId>structured-demo</artifactId>
+    <artifactId>spark-etl</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
@@ -19,11 +19,11 @@
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                     <!-- MainClass in mainfest make a executable jar -->
-                    <archive>
-                        <manifest>
-                            <mainClass>com.globalids.data.generator.StructuredStreamProcessor</mainClass>
-                        </manifest>
-                    </archive>
+                    <!--<archive>-->
+                        <!--<manifest>-->
+                            <!--<mainClass>com.globalids.data.generator.StructuredStreamProcessor</mainClass>-->
+                        <!--</manifest>-->
+                    <!--</archive>-->
 
                 </configuration>
                 <executions>
@@ -69,6 +69,11 @@
             <version>${spark-java-version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-hive_2.11</artifactId>
+            <version>${spark-java-version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.twitter</groupId>
             <artifactId>bijection-avro_2.11</artifactId>
             <version>0.9.5</version>
@@ -76,7 +81,7 @@
         <dependency>
             <groupId>com.databricks</groupId>
             <artifactId>spark-avro_2.11</artifactId>
-            <version>3.2.0</version>
+            <version>4.0.0</version>
             <type>jar</type>
         </dependency>
 
